@@ -7,12 +7,17 @@
         <Description>Remote Debugger for the MoonSharp interpreter</Description>
         <Copyright>Copyright © 2014-2015, Marco Mastropaolo</Copyright>
         <PackageProjectUrl>https://www.moonsharp.org</PackageProjectUrl>
-        <PackageLicenseUrl>https://raw.githubusercontent.com/moonsharp-devs/moonsharp/main/LICENSE</PackageLicenseUrl>
-        <RepositoryUrl>https://github.com/xanathar/moonsharp/</RepositoryUrl>
-        <PackageId>MoonSharp.VsCodeDebugger</PackageId>
+        <PackageLicenseFile>LICENSE</PackageLicenseFile>
+        <RepositoryUrl>https://github.com/moonsharp-devs/moonsharp/</RepositoryUrl>
+        <PackageId>MoonSharp.Debugger.VsCode</PackageId>
         <Title>MoonSharp.VsCodeDebugger</Title>
-        <PackageVersion>2.0.0</PackageVersion>
+        <MinVerTagPrefix>v</MinVerTagPrefix>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+        <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="All" />
+    </ItemGroup>
 
     <PropertyGroup Condition="'$(Configuration)'=='Debug'">
         <DebugSymbols>true</DebugSymbols>

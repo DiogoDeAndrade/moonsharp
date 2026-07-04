@@ -6,6 +6,62 @@ on:
       - "v*"
 
 jobs:
+  publish-nuget:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check NuGet credentials
+        id: nuget-creds
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${NUGET_API_KEY:-}" ]; then
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "should_run=false" >> "${GITHUB_OUTPUT}"
+            echo "NUGET_API_KEY secret is missing. NuGet publish will be skipped."
+          fi
+
+      - name: Checkout
+        if: steps.nuget-creds.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        if: steps.nuget-creds.outputs.should_run == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Pack
+        if: steps.nuget-creds.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          dotnet pack src/MoonSharp.Interpreter/MoonSharp.Interpreter.csproj -c Release -o .artifacts/nuget
+          dotnet pack src/MoonSharp.VsCodeDebugger/MoonSharp.VsCodeDebugger.csproj -c Release -o .artifacts/nuget
+
+          # MinVer derives the version from the checked-out tag; fail loudly if it disagrees.
+          EXPECTED_VERSION="${GITHUB_REF_NAME#v}"
+          for PKG in MoonSharp MoonSharp.Debugger.VsCode; do
+            if [ ! -f ".artifacts/nuget/${PKG}.${EXPECTED_VERSION}.nupkg" ]; then
+              echo "Expected .artifacts/nuget/${PKG}.${EXPECTED_VERSION}.nupkg but found:"
+              ls .artifacts/nuget
+              exit 1
+            fi
+          done
+
+      - name: Push to NuGet
+        if: steps.nuget-creds.outputs.should_run == 'true'
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          dotnet nuget push ".artifacts/nuget/*.nupkg" \
+            --api-key "${NUGET_API_KEY}" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate
+
   publish-upm-branches:
     runs-on: ubuntu-latest
     permissions:
