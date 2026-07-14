@@ -129,7 +129,14 @@ namespace MoonSharp.Interpreter.Execution.VM
 				that.NumVal2 = rd.ReadInt32();
 
 			if ((usage & ((int)InstructionFieldUsage.Name)) != 0)
+			{
 				that.Name = rd.ReadString();
+
+				// null Names are dumped as "" (see WriteBinary); restore null so that error
+				// messages don't render a bogus "near ''" fragment after an undump.
+				if (that.Name.Length == 0)
+					that.Name = null;
+			}
 
 			if ((usage & ((int)InstructionFieldUsage.Value)) != 0)
 				that.Value = ReadValue(rd, envTable);

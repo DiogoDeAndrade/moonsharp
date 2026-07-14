@@ -2,6 +2,27 @@ MoonSharp       [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/
 =========
 http://www.moonsharp.org   
 
+## About this fork
+
+This is a fork of [moonsharp-devs/moonsharp](https://github.com/moonsharp-devs/moonsharp), maintained by Spellcaster Studios for the *Blitz & Massive* remaster. Differences from upstream (all on `master`):
+
+* **Binary dumps keep source locations.** `Script.Dump` now serializes the per-instruction source refs (line/column spans) and `Script.LoadStream` restores them, remapped to the source the dump is loaded into. Upstream discards them, so every error thrown from precompiled bytecode reported line 0; with this fork, error messages and debugging info from dumped chunks match the source-loaded ones exactly. We use this to cache compiled Lua chunks and skip the parser at startup without losing error navigation.
+* **`Instruction.Name` round-trips as `null`.** Upstream dumps a null `Name` as `""`, which made errors from dumped chunks grow a bogus `near ''` fragment.
+* `DUMP_CHUNK_VERSION` was bumped `0x151` → `0x152`; dumps produced before/after this change are mutually incompatible (loaders throw "Invalid version" — just regenerate any cached bytecode).
+
+### Unity package branch
+
+The Unity project consumes the `upm/beta/v3.0_debug` branch:
+
+```json
+"org.moonsharp.moonsharp": "https://github.com/DiogoDeAndrade/moonsharp.git?path=/interpreter#upm/beta/v3.0_debug"
+```
+
+Upstream generates `upm/*` branches via CI: pushing a `vX.Y.Z-<prerelease>` tag runs `.github/workflows/upm-release.yml`, which takes the `unity-package-tgz` artifact from the `ci.yml` run for that commit and republishes it onto orphan branches `upm/<channel>/vX` and `upm/<channel>/vX.Y` (channel = prerelease prefix, e.g. `beta`). Those branches are *generated output*, not source — don't develop on them.
+
+`upm/beta/v3.0_debug` is maintained manually instead of via CI: it was branched from the generated `upm/beta/v3.0` and the files that changed on `master` since the `v3.0.0-beta.1` tag were copied from `src/MoonSharp.Interpreter/` into `interpreter/Runtime/` (the layout matches 1:1; `interpreter/Runtime/MoonSharp.Interpreter.asmdef` replaces the `.csproj`, and `.meta` files only need regenerating when files are added — see `tools/upm/upm-common.sh`). To update it after new `master` changes, repeat that copy and bump `interpreter/package.json`.
+
+
 
 
 A complete Lua solution written entirely in C# for the .NET, Mono, Xamarin and Unity3D platforms.
