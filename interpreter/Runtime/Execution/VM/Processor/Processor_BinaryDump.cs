@@ -11,7 +11,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 	sealed partial class Processor
 	{
 		const ulong DUMP_CHUNK_MAGIC = 0x1A0D234E4F4F4D1D;
-		const int DUMP_CHUNK_VERSION = 0x150;
+		const int DUMP_CHUNK_VERSION = 0x152;
 
 		internal static bool IsDumpStream(Stream stream)
 		{
@@ -79,11 +79,83 @@ namespace MoonSharp.Interpreter.Execution.VM
 				foreach (SymbolRef sym in allSymbols)
 					sym.WriteBinaryEnv(bw, symbolMap);
 
+				WriteSourceRefs(bw, baseAddress, meta.NumVal);
+
 				for (int i = 0; i <= meta.NumVal; i++)
 					m_RootChunk.Code[baseAddress + i].WriteBinary(bw, baseAddress, symbolMap);
 
 				return meta.NumVal + baseAddress + 1;
 			}
+		}
+
+		// Serializes the per-instruction source refs (line/column spans) so that chunks loaded
+		// back from a binary dump keep meaningful locations in error messages and debugging.
+		// Only positional data is stored: the source index is remapped on load to the SourceCode
+		// the dump is loaded into (see Undump).
+		private void WriteSourceRefs(BinaryWriter bw, int baseAddress, int lastIndex)
+		{
+			Dictionary<SourceRef, int> refMap = new Dictionary<SourceRef, int>();
+			List<SourceRef> refs = new List<SourceRef>();
+			int[] indices = new int[lastIndex + 1];
+
+			for (int i = 0; i <= lastIndex; i++)
+			{
+				SourceRef sref = m_RootChunk.Code[baseAddress + i].SourceCodeRef;
+
+				if (sref == null || sref.IsClrLocation)
+				{
+					indices[i] = -1;
+					continue;
+				}
+
+				int idx;
+				if (!refMap.TryGetValue(sref, out idx))
+				{
+					idx = refs.Count;
+					refMap.Add(sref, idx);
+					refs.Add(sref);
+				}
+
+				indices[i] = idx;
+			}
+
+			bw.Write(refs.Count);
+
+			foreach (SourceRef sref in refs)
+			{
+				bw.Write(sref.FromChar);
+				bw.Write(sref.ToChar);
+				bw.Write(sref.FromLine);
+				bw.Write(sref.ToLine);
+				bw.Write(sref.IsStepStop);
+				bw.Write(sref.CannotBreakpoint);
+			}
+
+			for (int i = 0; i <= lastIndex; i++)
+				bw.Write(indices[i]);
+		}
+
+		private static SourceRef[] ReadSourceRefs(BinaryReader br, int sourceID)
+		{
+			int numRefs = br.ReadInt32();
+			SourceRef[] refs = new SourceRef[numRefs];
+
+			for (int i = 0; i < numRefs; i++)
+			{
+				int fromChar = br.ReadInt32();
+				int toChar = br.ReadInt32();
+				int fromLine = br.ReadInt32();
+				int toLine = br.ReadInt32();
+				bool isStepStop = br.ReadBoolean();
+				bool cannotBreakpoint = br.ReadBoolean();
+
+				refs[i] = new SourceRef(sourceID, fromChar, toChar, fromLine, toLine, isStepStop);
+
+				if (cannotBreakpoint)
+					refs[i].SetNoBreakPoint();
+			}
+
+			return refs;
 		}
 
 		private void AddSymbolToMap(Dictionary<SymbolRef, int> symbolMap, SymbolRef s)
@@ -122,9 +194,17 @@ namespace MoonSharp.Interpreter.Execution.VM
 				for (int i = 0; i < numSymbs; i++)
 					allSymbs[i].ReadBinaryEnv(br, allSymbs);
 
+				SourceRef[] sourceRefs = ReadSourceRefs(br, sourceID);
+
+				int[] refIndices = new int[len + 1];
+
+				for (int i = 0; i <= len; i++)
+					refIndices[i] = br.ReadInt32();
+
 				for (int i = 0; i <= len; i++)
 				{
-					Instruction I = Instruction.ReadBinary(sourceRef, br, baseAddress, envTable, allSymbs);
+					SourceRef instructionRef = (refIndices[i] >= 0) ? sourceRefs[refIndices[i]] : sourceRef;
+					Instruction I = Instruction.ReadBinary(instructionRef, br, baseAddress, envTable, allSymbs);
 					m_RootChunk.Code.Add(I);
 				}
 
